@@ -1,0 +1,1 @@
+{"autoClearBuffer": true, "displayKeyframes": false, "rFutureTint": [0, 0, 0], "rPastTint": [0, 170, 0], "aTint": [125, 0, 0], "tintSeed": 0, "tintType": 0, "relativeFrameAmount": 8, "relativeStep": 1, "maxBufferSize": 200, "outlineWidth": 3, "onionType": 0, "drawBehind": true, "activeRelativeFrames": [-4, -2]}

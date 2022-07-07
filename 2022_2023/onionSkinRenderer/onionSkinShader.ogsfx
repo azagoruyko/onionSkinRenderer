@@ -1,0 +1,135 @@
+
+#include "Common.ogsfh"
+
+
+
+
+// The original image
+uniform texture2D gSourceTex : SourceTexture;
+
+// Sampler of original image
+uniform sampler2D gSourceSamp = sampler_state
+{
+    Texture = <gSourceTex>;
+};
+
+
+// The onion skin buffer
+uniform texture2D gSourceTex2 : SourceTexture2;
+
+// Sampler of onion skin buffer
+uniform sampler2D gSourceSamp2 = sampler_state
+{
+    Texture = <gSourceTex2>;
+};
+
+
+// current onion skin to be used as a stencil to display onion skin behind mesh
+uniform texture2D gStencilTex : SourceTexture3;
+
+// sampler for stencil
+uniform sampler2D gStencilSampler = sampler_state
+{
+    Texture = <gStencilTex>;
+};
+
+
+
+
+// Amount to blend source
+uniform float gBlendSrc = 0.3f;
+
+// actually don't know what that is used for. Was used in the example and doesn't break anything
+uniform vec4 gUVTransform : RelativeViewportDimensions;
+
+// viewport size in pixels to map from UV space to pixel space
+uniform vec4 gPixelTransform : ViewportPixelSize;
+
+// color with which each onion skin pixel is multiplied
+uniform vec4 gTint = {0.5, 0.5, 1.0, 1.0};
+
+// outline width in pixels
+uniform int gOutlineWidth = 5;
+
+// sets the way the onion skin is displayed. 0 = shaded, 1 = shape, 2 = outline
+uniform int gType = 0;
+
+// defines if onion skin is drawn behind or in front of current object
+// 0 = in front, 1 = behind
+uniform int gDrawBehind = 1;
+
+
+
+
+// 3 different types of onion skin visualization
+// they all blend two targets, variations just modify buffered image
+GLSLShader PS_Blend
+{
+	void main()
+	{
+        vec4 source = texture2D(gSourceSamp, VSUV * gUVTransform.zw + gUVTransform.xy);
+        vec4 onionSource = texture2D(gSourceSamp2, VSUV * gUVTransform.zw + gUVTransform.xy);
+        vec4 stencilSource = (texture2D(gStencilSampler, VSUV * gUVTransform.zw + gUVTransform.xy) * gDrawBehind -1 ) *-1;
+
+
+        // draw shaded
+        // normal blending between the original image and the buffered onion skin
+        if(gType == 0){
+            vec4 result = vec4( lerp(source, onionSource * gTint , gBlendSrc * onionSource.a * stencilSource.a));		
+            colorOut = result;
+        }
+
+
+        // draw shape
+        // uses only the alpha channel for blending, ommiting any shaded information
+        else if(gType == 1){
+            vec4 onionSourceAlpha = vec4(onionSource.a) * 0.75; // mult by 0.75 to darken
+            vec4 result = vec4( lerp(source, onionSourceAlpha *gTint , gBlendSrc * onionSourceAlpha.a * stencilSource.a));		
+
+            colorOut = result;
+        }
+
+
+        // draw outline
+        // creates an outline around the onion skins with the thickness specified in gOutlineWidth
+        else if(gType == 2){
+            // sample in 8 directions
+            vec4 onionSourceUp =        texture2D(gSourceSamp2, (VSUV * gUVTransform.zw + gUVTransform.xy) + vec2(0,-gOutlineWidth) / gPixelTransform.xy);
+            vec4 onionSourceUpLeft =    texture2D(gSourceSamp2, (VSUV * gUVTransform.zw + gUVTransform.xy) + vec2(gOutlineWidth/1.5,-gOutlineWidth/1.5) / gPixelTransform.xy);
+            vec4 onionSourceUpRight =   texture2D(gSourceSamp2, (VSUV * gUVTransform.zw + gUVTransform.xy) + vec2(-gOutlineWidth/1.5,-gOutlineWidth/1.5) / gPixelTransform.xy);
+            vec4 onionSourceDown =      texture2D(gSourceSamp2, (VSUV * gUVTransform.zw + gUVTransform.xy) + vec2(0,gOutlineWidth) / gPixelTransform.xy);
+            vec4 onionSourceDownLeft =  texture2D(gSourceSamp2, (VSUV * gUVTransform.zw + gUVTransform.xy) + vec2(gOutlineWidth/1.5,gOutlineWidth/1.5) / gPixelTransform.xy);
+            vec4 onionSourceDownRight = texture2D(gSourceSamp2, (VSUV * gUVTransform.zw + gUVTransform.xy) + vec2(-gOutlineWidth/1.5,gOutlineWidth/1.5) / gPixelTransform.xy);
+            vec4 onionSourceLeft =      texture2D(gSourceSamp2, (VSUV * gUVTransform.zw + gUVTransform.xy) + vec2(gOutlineWidth,0) / gPixelTransform.xy);
+            vec4 onionSourceRight =     texture2D(gSourceSamp2, (VSUV * gUVTransform.zw + gUVTransform.xy) + vec2(-gOutlineWidth,0) / gPixelTransform.xy);
+
+            // inverts the current alpha. That means the outline starts just outside the shape of the buffered onion skin
+            // OR links all samples (+)
+            vec4 onionSourceLine = vec4(onionSource.a-1) 
+                * -1 
+                * clamp(onionSourceUp.a + onionSourceUpRight.a + onionSourceUpLeft.a + onionSourceDown.a + onionSourceDownLeft.a + onionSourceDownRight.a + onionSourceLeft.a + onionSourceRight.a,0,1);
+
+
+            vec4 result = vec4( lerp(source, onionSourceLine *gTint , gBlendSrc * onionSourceLine.a * stencilSource.a));		
+
+            colorOut = result;
+        }
+
+
+	}
+}
+
+
+
+
+// The main technique.
+// not possible to dynamically switch technique?
+technique Main
+{
+    pass p0
+    {
+        VertexShader (in VS_INPUT_ScreenQuad, out VS_TO_PS_ScreenQuad) = VS_ScreenQuad;
+        PixelShader (in VS_TO_PS_ScreenQuad, out pixelOut) = PS_Blend;
+    }
+}
+
